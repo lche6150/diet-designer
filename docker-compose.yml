@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: diet-designer-api
+    ports:
+      - "4000:4000"
+    environment:
+      - PORT=4000
+      # DATABASE_URL will be automatically pulled from the .env file 
+      # specified below.
+    env_file:
+      - .env
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        # Pass the frontend's expected API URL to the build context
+        - NEXT_PUBLIC_API_BASE_URL=http://localhost:4000
+    container_name: diet-designer-web
+    ports:
+      - "3000:3000"
+    env_file:
+      - apps/web/.env.local
+    environment:
+      - NEXT_PUBLIC_API_BASE_URL=http://localhost:4000
+    depends_on:
+      - api

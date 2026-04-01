@@ -1,0 +1,24 @@
+Phase 1 – Foundations
+    1. Scaffold monorepo with workspaces (apps/web, apps/api, shared configs), add lint/format tooling, and commit baseline Next.js App Router + Express TS apps.
+    2. Provision core AWS infra (VPC, RDS, S3, ECR, ECS, Secrets Manager) and hook GitHub Actions CI for lint/test/build plus placeholder deploy job that ships "hello world" services.
+    3. Configure Tailwind + shadcn, React Query provider shells, Express health checks, and run initial Prisma migrations for User/MealPlan/Meal/Ingredient/ProductLink.
+
+Phase 2 – Auth & Landing Experience
+    1. Implement email/password signup with validation + OTP verification, password reset flow, JWT issuance/refresh, and Google OAuth; expose Account Settings API + UI.
+    2. Build landing/login/signup/dashboard skeleton pages with protected-route handling and mock KPI widgets wired to the auth/session state.
+    3. Add profile persistence (age, weight, preferences) using React Hook Form + Zod on the frontend and Prisma on the backend.
+
+Phase 3 – Planner Core
+    1. Ship diet-style selection + macro target flow (BMR/TDEE calculation service with manual overrides) and persist preferences per user.
+    2. Create ingredient search/selection UI powered by backend proxies to Spoonacular/USDA APIs, showing live macro totals via React Query mutations.
+    3. Build backend services for nutrition data normalization, unit conversions, and storing user-favorite ingredients; expose endpoints for saving preliminary ingredient sets.
+
+Phase 4 – Plan Assembly & Recipes
+    1. Design API contracts and data models for the ingredient-set recommendation service (algorithm remains TBD) that returns three proposed sets per goal.
+    2. Implement final meal-plan confirmation flow: map ingredients to Coles/Woolies products, persist finalized plans, and hook recipe suggestions from Spoonacular based on selected ingredients.
+    3. Finish `/planner`, `/recipes`, and `/dashboard` pages with full backend integration, optimistic updates, and error handling.
+
+Phase 5 – Operations & Polish
+    1. Add monitoring/observability (CloudWatch metrics/dashboards, structured logging, alerts) and introduce Redis caching for hot nutrition queries.
+    2. Harden security (rate limiting, validation, IAM least privilege), add Playwright end-to-end tests, and finish CI/CD deploy workflow with Docker build/push, ECS task updates, and S3 + CloudFront invalidation.
+    3. Document architecture + deployment steps in README/case study material to support resume/portfolio use.

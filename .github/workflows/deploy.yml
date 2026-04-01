@@ -1,0 +1,197 @@
+name: Deploy to AWS
+
+on:
+  push:
+    branches: [main]
+
+# Only run one deployment at a time; cancel older runs if a new push arrives.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  AWS_REGION:   ${{ secrets.AWS_REGION }}
+  PROJECT_NAME: diet-designer
+  ENVIRONMENT:  prod
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────────────
+  # 1. Build + push API image
+  # ──────────────────────────────────────────────────────────────────────────
+  build-api:
+    name: Build & Push API
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.build.outputs.image }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push API image
+        id: build
+        env:
+          REGISTRY:   ${{ steps.ecr-login.outputs.registry }}
+          REPOSITORY: ${{ env.PROJECT_NAME }}/api
+          IMAGE_TAG:  ${{ github.sha }}
+        run: |
+          IMAGE_URI="$REGISTRY/$REPOSITORY:$IMAGE_TAG"
+
+          docker build \
+            -f apps/api/Dockerfile \
+            -t "$IMAGE_URI" \
+            -t "$REGISTRY/$REPOSITORY:latest" \
+            .
+
+          docker push "$IMAGE_URI"
+          docker push "$REGISTRY/$REPOSITORY:latest"
+
+          echo "image=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 2. Build + push Web image
+  #    NEXT_PUBLIC_API_BASE_URL is read from SSM so it's always in sync with
+  #    whatever Terraform created. Baked into the Next.js bundle at build time.
+  # ──────────────────────────────────────────────────────────────────────────
+  build-web:
+    name: Build & Push Web
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.build.outputs.image }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Read API base URL from SSM
+        id: ssm
+        run: |
+          API_URL=$(aws ssm get-parameter \
+            --name "/${{ env.PROJECT_NAME }}/${{ env.ENVIRONMENT }}/API_BASE_URL" \
+            --query "Parameter.Value" \
+            --output text)
+          echo "api_url=$API_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Build, tag, and push Web image
+        id: build
+        env:
+          REGISTRY:              ${{ steps.ecr-login.outputs.registry }}
+          REPOSITORY:            ${{ env.PROJECT_NAME }}/web
+          IMAGE_TAG:             ${{ github.sha }}
+          NEXT_PUBLIC_API_URL:   ${{ steps.ssm.outputs.api_url }}
+        run: |
+          IMAGE_URI="$REGISTRY/$REPOSITORY:$IMAGE_TAG"
+
+          docker build \
+            -f apps/web/Dockerfile \
+            --build-arg NEXT_PUBLIC_API_BASE_URL="$NEXT_PUBLIC_API_URL" \
+            -t "$IMAGE_URI" \
+            -t "$REGISTRY/$REPOSITORY:latest" \
+            .
+
+          docker push "$IMAGE_URI"
+          docker push "$REGISTRY/$REPOSITORY:latest"
+
+          echo "image=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 3. Deploy API to ECS
+  # ──────────────────────────────────────────────────────────────────────────
+  deploy-api:
+    name: Deploy API to ECS
+    runs-on: ubuntu-latest
+    needs: build-api
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ env.AWS_REGION }}
+
+      - name: Download current API task definition
+        run: |
+          FAMILY="${{ env.PROJECT_NAME }}-${{ env.ENVIRONMENT }}-api"
+          aws ecs describe-task-definition \
+            --task-definition "$FAMILY" \
+            --query taskDefinition \
+            > task-def-api.json
+
+      - name: Update image in task definition
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition:   task-def-api.json
+          container-name:    api
+          image:             ${{ needs.build-api.outputs.image }}
+
+      - name: Deploy to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-def@v2
+        with:
+          task-definition:  ${{ steps.task-def.outputs.task-definition }}
+          service:          ${{ env.PROJECT_NAME }}-${{ env.ENVIRONMENT }}-api
+          cluster:          ${{ env.PROJECT_NAME }}-${{ env.ENVIRONMENT }}-cluster
+          wait-for-service-stability: true
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 4. Deploy Web to ECS
+  # ──────────────────────────────────────────────────────────────────────────
+  deploy-web:
+    name: Deploy Web to ECS
+    runs-on: ubuntu-latest
+    needs: build-web
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ env.AWS_REGION }}
+
+      - name: Download current Web task definition
+        run: |
+          FAMILY="${{ env.PROJECT_NAME }}-${{ env.ENVIRONMENT }}-web"
+          aws ecs describe-task-definition \
+            --task-definition "$FAMILY" \
+            --query taskDefinition \
+            > task-def-web.json
+
+      - name: Update image in task definition
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition:   task-def-web.json
+          container-name:    web
+          image:             ${{ needs.build-web.outputs.image }}
+
+      - name: Deploy to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-def@v2
+        with:
+          task-definition:  ${{ steps.task-def.outputs.task-definition }}
+          service:          ${{ env.PROJECT_NAME }}-${{ env.ENVIRONMENT }}-web
+          cluster:          ${{ env.PROJECT_NAME }}-${{ env.ENVIRONMENT }}-cluster
+          wait-for-service-stability: true

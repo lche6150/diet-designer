@@ -1,0 +1,294 @@
+Project Goal:
+A full stack project, which aims to develop a website, which allow user to customize their diet plan, in differnet mode(loss weight, muscle build, illness recover, ...)
+
+General workflow:
+1. User can to select their diet style first(muscle building/weight lossing/illness recover/...), based on their selected style, 
+    the website can give differnet ingredient combonaiton(like more protein for muscle building, less fat for weight lossing...)
+
+2. User can input their Weights, age, gender(which is used to calculate the nutrition they need each day based on their diet style), or they can input their desired 
+    daily nutrition/calories manually
+
+3. User can see the nutrition they need each day and calories estimated they need, then the user should be promoted to cutomize their diet(their favorable food/nutrition source), 
+then we complete the diet based on their nutrition needs(for example, the user might input chicken chest, rice, and so on to make sure these foods are in their diet, but
+we may/may not need futher food material to build a valide diet plan), after the user selected their desired food, we first propose three different set of food material, 
+the user are able to choose from those sets to confirm their daily food ingredient
+
+4. After the user selecting their desired food ingredient, we propose a recipe for them, which use the ingredient they selected,
+
+
+Functionality:
+
+User_system:
+1. login: 
+    a.login with user email and password 
+    b.login with google
+    c.login with one-time-code sent to their email
+
+2. sign_up:
+    sign up with their email and password, including password validating,
+    after valid information are given, sent a one time authtication code to their email
+    after user click the link sent to them, finish the sign up and direct them to the login page
+
+3. Account setting:
+    user are able to save their profile(age, weight...)
+    user are able to save the finilised diet
+    user are abtl to save their desired food ingredient
+    user are able to update/reset their password with email authentication
+
+4. General:
+    user should be able to input their personal information for daily nutrition needs estimation
+    user should be able to choose their deit style(muscle build/weight lossing...)
+    user should be able to choose from different food ingredient combanation we propose
+    user should be able to see and save the finalised diet
+
+
+API usage:
+Food nutrition information: USDA FoodData Central
+recipe information: Spoonacular
+
+recipe Generation algorithm: TBD
+
+
+
+
+tech stack:
+1️⃣ High-Level Tech Stack (TL;DR)
+
+Goal: “Full-stack fitness meal planner that generates macro-balanced meal plans and maps them to Coles/Woolies products.”
+
+🌐 Frontend
+
+Framework: React + TypeScript (using Next.js 14+ App Router)
+
+UI: Tailwind CSS + a component library (e.g. shadcn/ui or MUI)
+
+State: React Query (TanStack Query) for server state, basic local state with hooks
+
+Forms & Validation: React Hook Form + Zod
+
+Build/Bundle: Next.js (no extra bundler needed)
+
+Testing: Jest + React Testing Library + Playwright (optional e2e)
+
+🧠 Backend (API)
+
+Runtime: Node.js (LTS)
+
+Framework: Express (or NestJS if you want “enterprise” style)
+
+Language: TypeScript
+
+API style: REST (optional: add GraphQL later)
+
+ORM: Prisma (TypeScript + works nicely with Postgres)
+
+Validation: Zod / Joi on request schemas
+
+Auth: JWT-based auth (Access + Refresh) using passport-jwt or custom middleware
+
+External APIs:
+
+Nutrition: Edamam / Spoonacular
+
+Supermarket data: RapidAPI/Apify Coles/Woolworths (optional)
+
+🗄 Database & Storage
+
+Main DB: PostgreSQL on AWS RDS
+
+Caching (optional): Redis (Elasticache) for hot data (e.g. frequently used recipes)
+
+File Storage: AWS S3 for user avatars / exports
+
+☁️ AWS Infrastructure
+
+Backend hosting: ECS Fargate (Dockerized Node app) in a private subnet
+
+Frontend hosting:
+
+Option A: Next.js static export → S3 + CloudFront
+
+Option B: Deploy Next.js as a Node app on ECS too
+
+Database: Amazon RDS (PostgreSQL), private subnet, no public access
+
+Networking:
+
+VPC with public + private subnets
+
+Application Load Balancer (ALB) in front of ECS service
+
+Security:
+
+AWS Secrets Manager for DB/API keys
+
+IAM roles for ECS tasks to access S3/Secrets
+
+Monitoring:
+
+CloudWatch logs + metrics (CPU, memory, 5xx)
+
+Domain & TLS:
+
+Route 53 for DNS
+
+ACM for free SSL certificates (HTTPS on ALB & CloudFront)
+
+🔁 CI/CD
+
+Git hosting: GitHub
+
+CI/CD: GitHub Actions
+
+Build: Docker for frontend & backend
+
+Deploy:
+
+Push images to Amazon ECR
+
+Update ECS service via GitHub Actions (or AWS CodeDeploy)
+
+Sync built frontend to S3 + invalidate CloudFront cache
+
+2️⃣ Suggested Repo Structure
+
+Monorepo style (good for a full-stack project):
+
+fitness-meal-planner/
+├── apps/
+│   ├── web/                 # Next.js + React + TS
+│   └── api/                 # Express + TS backend
+├── infra/
+│   ├── terraform/           # (Optional) IaC for AWS
+│   └── docker/              # Dockerfiles, compose for local dev
+├── prisma/                  # Prisma schema & migrations
+├── .github/
+│   └── workflows/           # CI/CD pipelines (YAML)
+├── package.json
+└── README.md
+
+3️⃣ Backend Detail (API Layer)
+
+Key features you’ll implement:
+
+User auth: signup/login, save goals (calories, protein, etc.)
+
+Meal templates: breakfast/lunch/dinner with macro targets
+
+Ingredient & recipe search (via external API)
+
+Mapping to Coles/Woolworths products (via third-party API)
+
+User-saved meal plans
+
+Tech choices:
+
+Express + TS with controllers + services structure:
+
+apps/api/src/
+├── index.ts             # bootstraps Express
+├── routes/              # route definitions
+├── controllers/         # handle req/res
+├── services/            # business logic
+├── prisma/              # Prisma client
+├── middlewares/         # auth, validation
+└── utils/
+
+
+Prisma schema.prisma example entities:
+
+User
+
+MealPlan
+
+Meal (with type: breakfast/lunch/dinner)
+
+Ingredient
+
+ProductLink (maps ingredient ↔ supermarket product)
+
+Use environment variables (via dotenv in dev, Secrets Manager in prod).
+
+4️⃣ Frontend Detail (UI/UX)
+
+Pages / features:
+
+/ — landing page: explain features, login/signup
+
+/dashboard — show today’s macros & meals
+
+/planner — interactive meal planner:
+
+Set calorie/protein target
+
+Search ingredient → select amount → macros update in real time
+
+Show approximate Coles/Woolies items for shopping
+
+/recipes — browse or generate recipes based on macro targets
+
+Tech choices:
+
+Next.js App Router with TS:
+
+app/page.tsx for landing
+
+app/dashboard/page.tsx
+
+app/planner/page.tsx
+
+React Query to call your backend APIs
+
+Tailwind for fast layout + shadcn/ui for nice components
+
+5️⃣ CI/CD Pipeline (GitHub Actions → AWS)
+
+High level:
+
+🧪 CI (on every PR / push to main)
+
+Run npm install (or pnpm/yarn) in root.
+
+Build frontend: npm run build --workspace web
+
+Build backend: npm run build --workspace api
+
+Run tests:
+
+npm test --workspace web
+
+npm test --workspace api
+
+Lint: eslint + typescript --noEmit
+
+If all pass → allow merge.
+
+🚀 CD (on push to main)
+
+Backend deploy flow:
+
+Build Docker image for api.
+
+Tag and push to Amazon ECR.
+
+Update ECS task definition with new image tag.
+
+Trigger ECS service deployment (rolling update).
+
+Wait for ECS service to become healthy.
+
+Frontend deploy flow:
+
+Build Next.js app (npm run build --workspace web).
+
+Export static assets (if using static export) or build SSR image:
+
+Static: next export → output to out/
+
+Upload out/ to S3 bucket.
+
+Invalidate CloudFront cache so users get the new version.
+
+You can do all of this from a single deploy.yml workflow.
+
+
