@@ -149,7 +149,7 @@ jobs:
           image:             ${{ needs.build-api.outputs.image }}
 
       - name: Deploy to ECS
-        uses: aws-actions/amazon-ecs-deploy-task-def@v2
+        uses: aws-actions/amazon-ecs-deploy-task-def@v1
         with:
           task-definition:  ${{ steps.task-def.outputs.task-definition }}
           service:          ${{ env.PROJECT_NAME }}-${{ env.ENVIRONMENT }}-api
@@ -189,7 +189,7 @@ jobs:
           image:             ${{ needs.build-web.outputs.image }}
 
       - name: Deploy to ECS
-        uses: aws-actions/amazon-ecs-deploy-task-def@v2
+        uses: aws-actions/amazon-ecs-deploy-task-def@v1
         with:
           task-definition:  ${{ steps.task-def.outputs.task-definition }}
           service:          ${{ env.PROJECT_NAME }}-${{ env.ENVIRONMENT }}-web
