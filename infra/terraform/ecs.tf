@@ -62,11 +62,29 @@ resource "aws_ecs_task_definition" "api" {
       { name = "PORT",     value = "4000" },
     ]
 
-    # Pull DATABASE_URL at runtime from SSM (never stored in env vars or logs)
-    secrets = [{
-      name      = "DATABASE_URL"
-      valueFrom = aws_ssm_parameter.database_url.arn
-    }]
+    # Pull secrets at runtime from SSM (never stored in env vars or logs)
+    secrets = [
+      {
+        name      = "DATABASE_URL"
+        valueFrom = aws_ssm_parameter.database_url.arn
+      },
+      {
+        name      = "SPOONACULAR_API_KEY"
+        valueFrom = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/${var.project_name}/${var.environment}/SPOONACULAR_API_KEY"
+      },
+      {
+        name      = "USDA_API_KEY"
+        valueFrom = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/${var.project_name}/${var.environment}/USDA_API_KEY"
+      },
+      {
+        name      = "GOOGLE_CLIENT_ID"
+        valueFrom = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/${var.project_name}/${var.environment}/GOOGLE_CLIENT_ID"
+      },
+      {
+        name      = "JWT_SECRET"
+        valueFrom = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/${var.project_name}/${var.environment}/JWT_SECRET"
+      },
+    ]
 
     logConfiguration = {
       logDriver = "awslogs"
