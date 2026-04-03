@@ -7,7 +7,21 @@ resource "aws_lb" "main" {
   security_groups    = [aws_security_group.alb.id]
   subnets            = aws_subnet.public[*].id
 
+  access_logs {
+    bucket  = aws_s3_bucket.alb_logs.bucket
+    prefix  = "alb"
+    enabled = true
+  }
+
   enable_deletion_protection = false # set to true before going fully live
+
+  depends_on = [
+    aws_s3_bucket_policy.alb_logs,
+    aws_s3_bucket_public_access_block.alb_logs,
+    aws_s3_bucket_server_side_encryption_configuration.alb_logs,
+    aws_s3_bucket_versioning.alb_logs,
+    aws_s3_bucket_lifecycle_configuration.alb_logs,
+  ]
 
   tags = { Name = "${local.name}-alb" }
 }

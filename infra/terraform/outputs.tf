@@ -37,3 +37,8 @@ output "ssm_database_url_path" {
   description = "SSM parameter path for DATABASE_URL (SecureString)"
   value       = aws_ssm_parameter.database_url.name
 }
+
+output "alb_access_logs_bucket_name" {
+  description = "S3 bucket that stores ALB access logs"
+  value       = aws_s3_bucket.alb_logs.bucket
+}
