@@ -61,8 +61,6 @@ jobs:
 
   # ──────────────────────────────────────────────────────────────────────────
   # 2. Build + push Web image
-  #    NEXT_PUBLIC_API_BASE_URL is read from SSM so it's always in sync with
-  #    whatever Terraform created. Baked into the Next.js bundle at build time.
   # ──────────────────────────────────────────────────────────────────────────
   build-web:
     name: Build & Push Web
@@ -97,10 +95,10 @@ jobs:
       - name: Build, tag, and push Web image
         id: build
         env:
-          REGISTRY:              ${{ steps.ecr-login.outputs.registry }}
-          REPOSITORY:            ${{ env.PROJECT_NAME }}/web
-          IMAGE_TAG:             ${{ github.sha }}
-          NEXT_PUBLIC_API_URL:   ${{ steps.ssm.outputs.api_url }}
+          REGISTRY:            ${{ steps.ecr-login.outputs.registry }}
+          REPOSITORY:          ${{ env.PROJECT_NAME }}/web
+          IMAGE_TAG:           ${{ github.sha }}
+          NEXT_PUBLIC_API_URL: ${{ steps.ssm.outputs.api_url }}
         run: |
           IMAGE_URI="$REGISTRY/$REPOSITORY:$IMAGE_TAG"
 
@@ -117,7 +115,7 @@ jobs:
           echo "image=$IMAGE_URI" >> "$GITHUB_OUTPUT"
 
   # ──────────────────────────────────────────────────────────────────────────
-  # 3. Deploy API to ECS
+  # 3. Deploy API to ECS (pure AWS CLI — no marketplace actions)
   # ──────────────────────────────────────────────────────────────────────────
   deploy-api:
     name: Deploy API to ECS
@@ -132,32 +130,44 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region:            ${{ env.AWS_REGION }}
 
-      - name: Download current API task definition
+      - name: Deploy new image to ECS
+        env:
+          IMAGE:   ${{ needs.build-api.outputs.image }}
+          CLUSTER: ${{ env.PROJECT_NAME }}-${{ env.ENVIRONMENT }}-cluster
+          SERVICE: ${{ env.PROJECT_NAME }}-${{ env.ENVIRONMENT }}-api
+          FAMILY:  ${{ env.PROJECT_NAME }}-${{ env.ENVIRONMENT }}-api
         run: |
-          FAMILY="${{ env.PROJECT_NAME }}-${{ env.ENVIRONMENT }}-api"
-          aws ecs describe-task-definition \
+          # Fetch current task definition and strip read-only fields
+          TASK_DEF=$(aws ecs describe-task-definition \
             --task-definition "$FAMILY" \
             --query taskDefinition \
-            > task-def-api.json
+            --output json | \
+            jq 'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)')
 
-      - name: Update image in task definition
-        id: task-def
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
-        with:
-          task-definition:   task-def-api.json
-          container-name:    api
-          image:             ${{ needs.build-api.outputs.image }}
+          # Swap in the new image
+          NEW_TASK_DEF=$(echo "$TASK_DEF" | \
+            jq --arg IMAGE "$IMAGE" \
+            '(.containerDefinitions[] | select(.name=="api") | .image) |= $IMAGE')
 
-      - name: Deploy to ECS
-        uses: aws-actions/amazon-ecs-deploy-task-def@v1
-        with:
-          task-definition:  ${{ steps.task-def.outputs.task-definition }}
-          service:          ${{ env.PROJECT_NAME }}-${{ env.ENVIRONMENT }}-api
-          cluster:          ${{ env.PROJECT_NAME }}-${{ env.ENVIRONMENT }}-cluster
-          wait-for-service-stability: true
+          # Register the updated task definition
+          NEW_ARN=$(echo "$NEW_TASK_DEF" | \
+            aws ecs register-task-definition \
+              --cli-input-json file:///dev/stdin \
+              --query taskDefinition.taskDefinitionArn \
+              --output text)
+
+          # Update the service and wait for stability
+          aws ecs update-service \
+            --cluster "$CLUSTER" \
+            --service "$SERVICE" \
+            --task-definition "$NEW_ARN"
+
+          aws ecs wait services-stable \
+            --cluster "$CLUSTER" \
+            --services "$SERVICE"
 
   # ──────────────────────────────────────────────────────────────────────────
-  # 4. Deploy Web to ECS
+  # 4. Deploy Web to ECS (pure AWS CLI — no marketplace actions)
   # ──────────────────────────────────────────────────────────────────────────
   deploy-web:
     name: Deploy Web to ECS
@@ -172,26 +182,38 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region:            ${{ env.AWS_REGION }}
 
-      - name: Download current Web task definition
+      - name: Deploy new image to ECS
+        env:
+          IMAGE:   ${{ needs.build-web.outputs.image }}
+          CLUSTER: ${{ env.PROJECT_NAME }}-${{ env.ENVIRONMENT }}-cluster
+          SERVICE: ${{ env.PROJECT_NAME }}-${{ env.ENVIRONMENT }}-web
+          FAMILY:  ${{ env.PROJECT_NAME }}-${{ env.ENVIRONMENT }}-web
         run: |
-          FAMILY="${{ env.PROJECT_NAME }}-${{ env.ENVIRONMENT }}-web"
-          aws ecs describe-task-definition \
+          # Fetch current task definition and strip read-only fields
+          TASK_DEF=$(aws ecs describe-task-definition \
             --task-definition "$FAMILY" \
             --query taskDefinition \
-            > task-def-web.json
+            --output json | \
+            jq 'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)')
 
-      - name: Update image in task definition
-        id: task-def
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
-        with:
-          task-definition:   task-def-web.json
-          container-name:    web
-          image:             ${{ needs.build-web.outputs.image }}
+          # Swap in the new image
+          NEW_TASK_DEF=$(echo "$TASK_DEF" | \
+            jq --arg IMAGE "$IMAGE" \
+            '(.containerDefinitions[] | select(.name=="web") | .image) |= $IMAGE')
 
-      - name: Deploy to ECS
-        uses: aws-actions/amazon-ecs-deploy-task-def@v1
-        with:
-          task-definition:  ${{ steps.task-def.outputs.task-definition }}
-          service:          ${{ env.PROJECT_NAME }}-${{ env.ENVIRONMENT }}-web
-          cluster:          ${{ env.PROJECT_NAME }}-${{ env.ENVIRONMENT }}-cluster
-          wait-for-service-stability: true
+          # Register the updated task definition
+          NEW_ARN=$(echo "$NEW_TASK_DEF" | \
+            aws ecs register-task-definition \
+              --cli-input-json file:///dev/stdin \
+              --query taskDefinition.taskDefinitionArn \
+              --output text)
+
+          # Update the service and wait for stability
+          aws ecs update-service \
+            --cluster "$CLUSTER" \
+            --service "$SERVICE" \
+            --task-definition "$NEW_ARN"
+
+          aws ecs wait services-stable \
+            --cluster "$CLUSTER" \
+            --services "$SERVICE"
