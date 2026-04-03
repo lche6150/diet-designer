@@ -148,7 +148,7 @@ jobs:
 
           # Swap in the new image
           jq --arg IMAGE "$IMAGE" \
-            '(.containerDefinitions[] | select(.name=="api") | .image) |= $IMAGE' \
+            '.containerDefinitions = (.containerDefinitions | map(if .name == "api" then .image = $IMAGE else . end))' \
             cleaned.json > new-task-def.json
 
           # Register the updated task definition
@@ -201,7 +201,7 @@ jobs:
 
           # Swap in the new image
           jq --arg IMAGE "$IMAGE" \
-            '(.containerDefinitions[] | select(.name=="web") | .image) |= $IMAGE' \
+            '.containerDefinitions = (.containerDefinitions | map(if .name == "web" then .image = $IMAGE else . end))' \
             cleaned.json > new-task-def.json
 
           # Register the updated task definition
