@@ -132,11 +132,15 @@ jobs:
 
       - name: Deploy new image to ECS
         env:
-          IMAGE:   ${{ needs.build-api.outputs.image }}
           CLUSTER: ${{ env.PROJECT_NAME }}-${{ env.ENVIRONMENT }}-cluster
           SERVICE: ${{ env.PROJECT_NAME }}-${{ env.ENVIRONMENT }}-api
           FAMILY:  ${{ env.PROJECT_NAME }}-${{ env.ENVIRONMENT }}-api
         run: |
+          # Build the image URI directly — avoids relying on inter-job output
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          IMAGE="$ACCOUNT_ID.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.PROJECT_NAME }}/api:${{ github.sha }}"
+          echo "Deploying image: $IMAGE"
+
           # Fetch and clean the current task definition
           aws ecs describe-task-definition \
             --task-definition "$FAMILY" \
@@ -146,16 +150,24 @@ jobs:
           jq 'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)' \
             current.json > cleaned.json
 
+          echo "Container names in task def:"
+          jq -r '.containerDefinitions[].name' cleaned.json
+
           # Swap in the new image
           jq --arg IMAGE "$IMAGE" \
             '.containerDefinitions = (.containerDefinitions | map(if .name == "api" then .image = $IMAGE else . end))' \
             cleaned.json > new-task-def.json
+
+          echo "Image set in new task def:"
+          jq -r '.containerDefinitions[].image' new-task-def.json
 
           # Register the updated task definition
           NEW_ARN=$(aws ecs register-task-definition \
             --cli-input-json file://new-task-def.json \
             --query taskDefinition.taskDefinitionArn \
             --output text)
+
+          echo "New task def ARN: $NEW_ARN"
 
           # Update the service and wait for stability
           aws ecs update-service \
@@ -185,11 +197,15 @@ jobs:
 
       - name: Deploy new image to ECS
         env:
-          IMAGE:   ${{ needs.build-web.outputs.image }}
           CLUSTER: ${{ env.PROJECT_NAME }}-${{ env.ENVIRONMENT }}-cluster
           SERVICE: ${{ env.PROJECT_NAME }}-${{ env.ENVIRONMENT }}-web
           FAMILY:  ${{ env.PROJECT_NAME }}-${{ env.ENVIRONMENT }}-web
         run: |
+          # Build the image URI directly — avoids relying on inter-job output
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          IMAGE="$ACCOUNT_ID.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.PROJECT_NAME }}/web:${{ github.sha }}"
+          echo "Deploying image: $IMAGE"
+
           # Fetch and clean the current task definition
           aws ecs describe-task-definition \
             --task-definition "$FAMILY" \
@@ -199,16 +215,24 @@ jobs:
           jq 'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)' \
             current.json > cleaned.json
 
+          echo "Container names in task def:"
+          jq -r '.containerDefinitions[].name' cleaned.json
+
           # Swap in the new image
           jq --arg IMAGE "$IMAGE" \
             '.containerDefinitions = (.containerDefinitions | map(if .name == "web" then .image = $IMAGE else . end))' \
             cleaned.json > new-task-def.json
+
+          echo "Image set in new task def:"
+          jq -r '.containerDefinitions[].image' new-task-def.json
 
           # Register the updated task definition
           NEW_ARN=$(aws ecs register-task-definition \
             --cli-input-json file://new-task-def.json \
             --query taskDefinition.taskDefinitionArn \
             --output text)
+
+          echo "New task def ARN: $NEW_ARN"
 
           # Update the service and wait for stability
           aws ecs update-service \
