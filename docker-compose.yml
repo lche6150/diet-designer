@@ -22,6 +22,7 @@ services:
       args:
         # Pass the frontend's expected API URL to the build context
         - NEXT_PUBLIC_API_BASE_URL=http://localhost:4000
+        - NEXT_PUBLIC_GOOGLE_CLIENT_ID=${NEXT_PUBLIC_GOOGLE_CLIENT_ID}
     container_name: diet-designer-web
     ports:
       - "3000:3000"
@@ -29,5 +30,6 @@ services:
       - apps/web/.env.local
     environment:
       - NEXT_PUBLIC_API_BASE_URL=http://localhost:4000
+      - NEXT_PUBLIC_GOOGLE_CLIENT_ID=${NEXT_PUBLIC_GOOGLE_CLIENT_ID}
     depends_on:
       - api

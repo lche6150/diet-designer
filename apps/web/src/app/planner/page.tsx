@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
 import SiteHeader from "../../components/site-header";
 import IngredientSearch, {
@@ -176,9 +177,11 @@ export default function PlannerPage() {
                         className="flex h-full flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm"
                       >
                         {meal.image ? (
-                          <img
+                          <Image
                             src={meal.image}
                             alt={meal.title}
+                            width={640}
+                            height={320}
                             className="h-40 w-full object-cover"
                           />
                         ) : null}

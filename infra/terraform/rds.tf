@@ -36,10 +36,10 @@ resource "aws_db_instance" "main" {
   vpc_security_group_ids = [aws_security_group.rds.id]
 
   # Cost optimisation — disable for production workloads that need HA
-  multi_az               = false
-  publicly_accessible    = false
-  skip_final_snapshot    = true   # set to false before going fully live
-  deletion_protection    = false  # set to true before going fully live
+  multi_az            = false
+  publicly_accessible = false
+  skip_final_snapshot = true  # set to false before going fully live
+  deletion_protection = false # set to true before going fully live
 
   backup_retention_period = 7
   backup_window           = "03:00-04:00"

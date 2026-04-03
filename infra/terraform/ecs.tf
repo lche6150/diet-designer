@@ -47,7 +47,7 @@ resource "aws_ecs_task_definition" "api" {
   task_role_arn            = aws_iam_role.ecs_task.arn
 
   container_definitions = jsonencode([{
-    name  = "api"
+    name = "api"
     # CI/CD will update this image tag on every deploy.
     # Using :latest here so the initial `terraform apply` creates a valid definition.
     image = "${aws_ecr_repository.api.repository_url}:latest"
@@ -59,7 +59,7 @@ resource "aws_ecs_task_definition" "api" {
 
     environment = [
       { name = "NODE_ENV", value = "production" },
-      { name = "PORT",     value = "4000" },
+      { name = "PORT", value = "4000" },
     ]
 
     # Pull secrets at runtime from SSM (never stored in env vars or logs)
@@ -128,6 +128,13 @@ resource "aws_ecs_task_definition" "web" {
       { name = "NEXT_PUBLIC_API_BASE_URL", value = "http://${aws_lb.main.dns_name}" },
     ]
 
+    secrets = [
+      {
+        name      = "NEXT_PUBLIC_GOOGLE_CLIENT_ID"
+        valueFrom = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/${var.project_name}/${var.environment}/GOOGLE_CLIENT_ID"
+      },
+    ]
+
     logConfiguration = {
       logDriver = "awslogs"
       options = {
@@ -187,8 +194,8 @@ resource "aws_ecs_service" "web" {
   }
 
   network_configuration {
-    subnets         = aws_subnet.private[*].id
-    security_groups = [aws_security_group.web.id]
+    subnets          = aws_subnet.private[*].id
+    security_groups  = [aws_security_group.web.id]
     assign_public_ip = false
   }
 

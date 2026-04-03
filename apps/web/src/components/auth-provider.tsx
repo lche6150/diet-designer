@@ -13,7 +13,6 @@ import {
   clearAuthSession,
   fetchCurrentUser,
   getStoredToken,
-  getStoredUser,
   storeAuthSession,
 } from "../lib/auth";
 
@@ -68,19 +67,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, [signIn, signOut]);
 
   useEffect(() => {
-    const storedToken = getStoredToken();
-    const storedUser = getStoredUser();
+    const timeoutId = window.setTimeout(() => {
+      void refresh();
+    }, 0);
 
-    if (!storedToken) {
-      setStatus("guest");
-      return;
-    }
-
-    setToken(storedToken);
-    setUser(storedUser);
-    setStatus(storedUser ? "authenticated" : "loading");
-
-    refresh();
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
   }, [refresh]);
 
   const value = useMemo(

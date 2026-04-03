@@ -1,18 +1,22 @@
 name: Deploy to AWS
 
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
     branches: [main]
+  workflow_dispatch:
 
 # Only run one deployment at a time; cancel older runs if a new push arrives.
 concurrency:
-  group: deploy-${{ github.ref }}
+  group: deploy-${{ github.event.workflow_run.head_branch || github.ref_name }}
   cancel-in-progress: true
 
 env:
   AWS_REGION:   ${{ secrets.AWS_REGION }}
   PROJECT_NAME: diet-designer
   ENVIRONMENT:  prod
+  DEPLOY_SHA:   ${{ github.event.workflow_run.head_sha || github.sha }}
 
 jobs:
   # ──────────────────────────────────────────────────────────────────────────
@@ -20,6 +24,7 @@ jobs:
   # ──────────────────────────────────────────────────────────────────────────
   build-api:
     name: Build & Push API
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     outputs:
       image: ${{ steps.build.outputs.image }}
@@ -27,6 +32,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -44,7 +51,7 @@ jobs:
         env:
           REGISTRY:   ${{ steps.ecr-login.outputs.registry }}
           REPOSITORY: ${{ env.PROJECT_NAME }}/api
-          IMAGE_TAG:  ${{ github.sha }}
+          IMAGE_TAG:  ${{ env.DEPLOY_SHA }}
         run: |
           IMAGE_URI="$REGISTRY/$REPOSITORY:$IMAGE_TAG"
 
@@ -64,6 +71,7 @@ jobs:
   # ──────────────────────────────────────────────────────────────────────────
   build-web:
     name: Build & Push Web
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     outputs:
       image: ${{ steps.build.outputs.image }}
@@ -71,6 +79,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -83,28 +93,36 @@ jobs:
         id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Read API base URL from SSM
+      - name: Read web build configuration from SSM
         id: ssm
         run: |
           API_URL=$(aws ssm get-parameter \
             --name "/${{ env.PROJECT_NAME }}/${{ env.ENVIRONMENT }}/API_BASE_URL" \
             --query "Parameter.Value" \
             --output text)
+          GOOGLE_CLIENT_ID=$(aws ssm get-parameter \
+            --name "/${{ env.PROJECT_NAME }}/${{ env.ENVIRONMENT }}/GOOGLE_CLIENT_ID" \
+            --with-decryption \
+            --query "Parameter.Value" \
+            --output text)
           echo "api_url=$API_URL" >> "$GITHUB_OUTPUT"
+          echo "google_client_id=$GOOGLE_CLIENT_ID" >> "$GITHUB_OUTPUT"
 
       - name: Build, tag, and push Web image
         id: build
         env:
-          REGISTRY:            ${{ steps.ecr-login.outputs.registry }}
-          REPOSITORY:          ${{ env.PROJECT_NAME }}/web
-          IMAGE_TAG:           ${{ github.sha }}
-          NEXT_PUBLIC_API_URL: ${{ steps.ssm.outputs.api_url }}
+          REGISTRY:                      ${{ steps.ecr-login.outputs.registry }}
+          REPOSITORY:                    ${{ env.PROJECT_NAME }}/web
+          IMAGE_TAG:                     ${{ env.DEPLOY_SHA }}
+          NEXT_PUBLIC_API_URL:           ${{ steps.ssm.outputs.api_url }}
+          NEXT_PUBLIC_GOOGLE_CLIENT_ID:  ${{ steps.ssm.outputs.google_client_id }}
         run: |
           IMAGE_URI="$REGISTRY/$REPOSITORY:$IMAGE_TAG"
 
           docker build \
             -f apps/web/Dockerfile \
             --build-arg NEXT_PUBLIC_API_BASE_URL="$NEXT_PUBLIC_API_URL" \
+            --build-arg NEXT_PUBLIC_GOOGLE_CLIENT_ID="$NEXT_PUBLIC_GOOGLE_CLIENT_ID" \
             -t "$IMAGE_URI" \
             -t "$REGISTRY/$REPOSITORY:latest" \
             .
@@ -119,6 +137,7 @@ jobs:
   # ──────────────────────────────────────────────────────────────────────────
   deploy-api:
     name: Deploy API to ECS
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     needs: build-api
 
@@ -138,7 +157,7 @@ jobs:
         run: |
           # Build the image URI directly — avoids relying on inter-job output
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          IMAGE="$ACCOUNT_ID.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.PROJECT_NAME }}/api:${{ github.sha }}"
+          IMAGE="$ACCOUNT_ID.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.PROJECT_NAME }}/api:${{ env.DEPLOY_SHA }}"
           echo "Deploying image: $IMAGE"
 
           # Fetch and clean the current task definition
@@ -184,6 +203,7 @@ jobs:
   # ──────────────────────────────────────────────────────────────────────────
   deploy-web:
     name: Deploy Web to ECS
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     needs: build-web
 
@@ -203,7 +223,7 @@ jobs:
         run: |
           # Build the image URI directly — avoids relying on inter-job output
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          IMAGE="$ACCOUNT_ID.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.PROJECT_NAME }}/web:${{ github.sha }}"
+          IMAGE="$ACCOUNT_ID.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.PROJECT_NAME }}/web:${{ env.DEPLOY_SHA }}"
           echo "Deploying image: $IMAGE"
 
           # Fetch and clean the current task definition

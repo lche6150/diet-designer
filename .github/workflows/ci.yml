@@ -4,6 +4,7 @@ on:
   pull_request:
   push:
     branches: ["main"]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -11,6 +12,19 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform format check
+        run: terraform -chdir=infra/terraform fmt -check
+
+      - name: Terraform validate
+        run: |
+          terraform -chdir=infra/terraform init -backend=false
+          terraform -chdir=infra/terraform validate
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -25,10 +39,15 @@ jobs:
           npm install
 
       - name: Generate Prisma client
+        env:
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/diet_designer?schema=public"
         run: npx prisma generate --schema=prisma/prisma/schema.prisma
 
       - name: Build Backend
         run: npm run build --workspace apps/api
+
+      - name: Lint Frontend
+        run: npm run lint --workspace apps/web
 
       - name: Build Frontend
         run: npm run build --workspace apps/web

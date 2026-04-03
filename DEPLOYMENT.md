@@ -98,8 +98,18 @@ in the bucket name.
 ```bash
 cd infra/terraform
 cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars — the defaults are fine for a first deploy
+# Edit terraform.tfvars for region, sizing, and naming
 ```
+
+Before `terraform apply`, create these SSM parameters in AWS Parameter Store:
+- `/${project_name}/${environment}/GOOGLE_CLIENT_ID`
+- `/${project_name}/${environment}/JWT_SECRET`
+- `/${project_name}/${environment}/SPOONACULAR_API_KEY`
+- `/${project_name}/${environment}/USDA_API_KEY`
+
+The repo expects those parameters to exist already; Terraform references them
+from ECS task definitions and the deploy workflow reads `GOOGLE_CLIENT_ID`
+directly from SSM during the web image build.
 
 ---
 
@@ -140,8 +150,8 @@ add the following repository secrets:
 | `AWS_SECRET_ACCESS_KEY` | Your AWS secret access key |
 | `AWS_REGION` | e.g. `us-east-1` |
 
-> The `NEXT_PUBLIC_API_BASE_URL` is fetched automatically from SSM during CI/CD
-> — no need to add it as a secret.
+> The deploy workflow reads `API_BASE_URL` and decrypts `GOOGLE_CLIENT_ID` from SSM
+> during CI/CD, so they do not need to be duplicated in GitHub secrets.
 
 ---
 
@@ -151,7 +161,7 @@ Push any change to `main` (or re-run the workflow manually in the GitHub UI)
 to trigger the CI/CD pipeline. The pipeline will:
 
 1. Build the API Docker image and push it to ECR.
-2. Read the ALB URL from SSM, bake it into the Next.js bundle, and push the web image.
+2. Read the ALB URL and Google client ID from SSM, bake them into the Next.js bundle, and push the web image.
 3. Register new ECS task definition revisions with the new image tags.
 4. Perform a rolling deploy of both services.
 

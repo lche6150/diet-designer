@@ -1,3 +1,4 @@
+import Link from "next/link";
 import AuthRedirect from "../../components/auth-redirect";
 import GoogleAuthButton from "../../components/google-auth-button";
 
@@ -6,12 +7,12 @@ export default function SignInPage() {
     <AuthRedirect redirectTo="/">
       <div className="min-h-screen bg-zinc-50 text-zinc-900">
         <header className="flex items-center justify-between px-6 py-4">
-          <a className="text-lg font-semibold" href="/">
+          <Link className="text-lg font-semibold" href="/">
             Diet Designer
-          </a>
-          <a className="text-sm font-medium text-zinc-700 hover:text-zinc-900" href="/signup">
+          </Link>
+          <Link className="text-sm font-medium text-zinc-700 hover:text-zinc-900" href="/signup">
             Create account
-          </a>
+          </Link>
         </header>
 
         <main className="flex items-center justify-center px-6 py-20">

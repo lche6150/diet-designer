@@ -42,7 +42,7 @@ resource "aws_iam_role_policy" "ecs_execution_ssm" {
         # Required to decrypt SecureString parameters (encrypted with the default aws/ssm KMS key)
         Effect   = "Allow"
         Action   = ["kms:Decrypt"]
-        Resource = "arn:aws:kms:${var.aws_region}:${data.aws_caller_identity.current.account_id}:key/alias/aws/ssm"
+        Resource = "arn:aws:kms:${var.aws_region}:${data.aws_caller_identity.current.account_id}:alias/aws/ssm"
       }
     ]
   })
