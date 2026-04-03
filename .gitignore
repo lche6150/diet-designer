@@ -27,6 +27,7 @@ yarn-error.log*
 # OS
 .DS_Store
 Thumbs.db
+session-manager-plugin.pkg
 
 # Editor
 .idea/

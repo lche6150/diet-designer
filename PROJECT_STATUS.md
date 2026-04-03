@@ -12,8 +12,7 @@ The project is deployed and operational on AWS.
 - Web ECR: `206749730536.dkr.ecr.ap-southeast-2.amazonaws.com/diet-designer/web`
 - RDS endpoint: `diet-designer-prod-postgres.czqsa2qw6oic.ap-southeast-2.rds.amazonaws.com`
 - ALB access log bucket: `diet-designer-prod-alb-logs-206749730536`
-
-The Git worktree was clean when this report was generated.
+- API ECS Exec: enabled for VPC-side operational access
 
 ## What Was Implemented
 
@@ -168,6 +167,47 @@ Inspect one log file:
 aws s3 cp "s3://FULL_LOG_PATH.log.gz" - --region ap-southeast-2 | gunzip -c
 ```
 
+### 7. ECS Exec for Private DB Access
+
+ECS Exec was enabled on the API service so the project can be inspected from
+inside the VPC without exposing the RDS instance publicly.
+
+What it provides:
+- Shell access inside the running API container
+- Database inspection from the same network path the API uses
+- A reusable script for listing users or opening an interactive shell
+
+Main files:
+- `infra/terraform/ecs.tf`
+- `infra/terraform/iam.tf`
+- `scripts/ecs-api-db.sh`
+
+How to use:
+
+Open a shell in the API task:
+
+```bash
+./scripts/ecs-api-db.sh shell
+```
+
+List registered users:
+
+```bash
+./scripts/ecs-api-db.sh users
+```
+
+Print the user count:
+
+```bash
+./scripts/ecs-api-db.sh count
+```
+
+Run a one-off remote command:
+
+```bash
+./scripts/ecs-api-db.sh exec 'env | sort'
+```
+
 ## What The Project Can Do Now
 
 The current deployed project can:
@@ -183,6 +223,7 @@ The current deployed project can:
 - Build and deploy automatically from GitHub Actions
 - Store runtime configuration and secrets in SSM
 - Record request history through ALB access logs in S3
+- Inspect private RDS-backed user data safely from inside the VPC via ECS Exec
 
 ## How To Operate The Project
 
@@ -223,12 +264,41 @@ Notes:
 - One page load may create multiple log entries
 - Logs are written with a delay, not instantly
 
+### Inspect Registered Users / DB Access
+
+The RDS instance is private and cannot be queried directly from a typical local
+machine. Use ECS Exec through the API service instead.
+
+Open a shell:
+
+```bash
+./scripts/ecs-api-db.sh shell
+```
+
+List users:
+
+```bash
+./scripts/ecs-api-db.sh users
+```
+
+Count users:
+
+```bash
+./scripts/ecs-api-db.sh count
+```
+
+Requirements:
+- AWS CLI configured
+- `session-manager-plugin` installed locally
+- ECS Exec enabled on the API service
+
 ## Current Status Summary
 
 - Infrastructure deployed successfully
 - Website live and accessible
 - Google sign-in working
 - Database connection working
+- Private DB inspection available through ECS Exec
 - CI/CD working
 - ALB access logs writing to S3
 - Repository state aligned with deployed infrastructure
