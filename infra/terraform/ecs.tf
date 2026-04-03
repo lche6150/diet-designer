@@ -153,11 +153,12 @@ resource "aws_ecs_task_definition" "web" {
 # ── ECS Services ──────────────────────────────────────────────────────────────
 
 resource "aws_ecs_service" "api" {
-  name            = "${local.name}-api"
-  cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.api.arn
-  desired_count   = var.api_desired_count
-  launch_type     = "FARGATE"
+  name                   = "${local.name}-api"
+  cluster                = aws_ecs_cluster.main.id
+  task_definition        = aws_ecs_task_definition.api.arn
+  desired_count          = var.api_desired_count
+  launch_type            = "FARGATE"
+  enable_execute_command = true
 
   # Prevent Terraform from reverting image tags that CI/CD has updated
   lifecycle {
