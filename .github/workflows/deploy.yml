@@ -137,24 +137,25 @@ jobs:
           SERVICE: ${{ env.PROJECT_NAME }}-${{ env.ENVIRONMENT }}-api
           FAMILY:  ${{ env.PROJECT_NAME }}-${{ env.ENVIRONMENT }}-api
         run: |
-          # Fetch current task definition and strip read-only fields
-          TASK_DEF=$(aws ecs describe-task-definition \
+          # Fetch and clean the current task definition
+          aws ecs describe-task-definition \
             --task-definition "$FAMILY" \
             --query taskDefinition \
-            --output json | \
-            jq 'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)')
+            --output json > current.json
+
+          jq 'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)' \
+            current.json > cleaned.json
 
           # Swap in the new image
-          NEW_TASK_DEF=$(echo "$TASK_DEF" | \
-            jq --arg IMAGE "$IMAGE" \
-            '(.containerDefinitions[] | select(.name=="api") | .image) |= $IMAGE')
+          jq --arg IMAGE "$IMAGE" \
+            '(.containerDefinitions[] | select(.name=="api") | .image) |= $IMAGE' \
+            cleaned.json > new-task-def.json
 
           # Register the updated task definition
-          NEW_ARN=$(echo "$NEW_TASK_DEF" | \
-            aws ecs register-task-definition \
-              --cli-input-json file:///dev/stdin \
-              --query taskDefinition.taskDefinitionArn \
-              --output text)
+          NEW_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://new-task-def.json \
+            --query taskDefinition.taskDefinitionArn \
+            --output text)
 
           # Update the service and wait for stability
           aws ecs update-service \
@@ -189,24 +190,25 @@ jobs:
           SERVICE: ${{ env.PROJECT_NAME }}-${{ env.ENVIRONMENT }}-web
           FAMILY:  ${{ env.PROJECT_NAME }}-${{ env.ENVIRONMENT }}-web
         run: |
-          # Fetch current task definition and strip read-only fields
-          TASK_DEF=$(aws ecs describe-task-definition \
+          # Fetch and clean the current task definition
+          aws ecs describe-task-definition \
             --task-definition "$FAMILY" \
             --query taskDefinition \
-            --output json | \
-            jq 'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)')
+            --output json > current.json
+
+          jq 'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)' \
+            current.json > cleaned.json
 
           # Swap in the new image
-          NEW_TASK_DEF=$(echo "$TASK_DEF" | \
-            jq --arg IMAGE "$IMAGE" \
-            '(.containerDefinitions[] | select(.name=="web") | .image) |= $IMAGE')
+          jq --arg IMAGE "$IMAGE" \
+            '(.containerDefinitions[] | select(.name=="web") | .image) |= $IMAGE' \
+            cleaned.json > new-task-def.json
 
           # Register the updated task definition
-          NEW_ARN=$(echo "$NEW_TASK_DEF" | \
-            aws ecs register-task-definition \
-              --cli-input-json file:///dev/stdin \
-              --query taskDefinition.taskDefinitionArn \
-              --output text)
+          NEW_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://new-task-def.json \
+            --query taskDefinition.taskDefinitionArn \
+            --output text)
 
           # Update the service and wait for stability
           aws ecs update-service \
