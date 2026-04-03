@@ -24,6 +24,9 @@ jobs:
           rm -rf node_modules apps/web/node_modules apps/api/node_modules
           npm install
 
+      - name: Generate Prisma client
+        run: npx prisma generate --schema=prisma/prisma/schema.prisma
+
       - name: Build Backend
         run: npm run build --workspace apps/api
 
