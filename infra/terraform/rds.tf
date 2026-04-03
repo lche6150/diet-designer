@@ -53,7 +53,7 @@ resource "aws_db_instance" "main" {
 resource "aws_ssm_parameter" "database_url" {
   name  = "/${var.project_name}/${var.environment}/DATABASE_URL"
   type  = "SecureString"
-  value = "postgresql://${var.db_username}:${random_password.db.result}@${aws_db_instance.main.address}:5432/${var.db_name}?schema=public"
+  value = "postgresql://${var.db_username}:${urlencode(random_password.db.result)}@${aws_db_instance.main.address}:5432/${var.db_name}?schema=public&sslmode=no-verify"
 
   tags = { Name = "${local.name}-database-url" }
 }
