@@ -34,8 +34,10 @@ jobs:
       - name: Install dependencies
         # Delete node_modules and reinstall fresh so platform-specific native
         # binaries (lightningcss, SWC, Tailwind Oxide) match the Linux runner.
+        # The committed lockfile was generated on macOS and does not include the
+        # Linux lightningcss package entry that Next/Tailwind need in CI.
         run: |
-          rm -rf node_modules apps/web/node_modules apps/api/node_modules
+          rm -rf package-lock.json node_modules apps/web/node_modules apps/api/node_modules
           npm install
 
       - name: Generate Prisma client
