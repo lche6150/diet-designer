@@ -157,8 +157,9 @@ add the following repository secrets:
 
 ### Step 7 — First deploy
 
-Push any change to `main` (or re-run the workflow manually in the GitHub UI)
-to trigger the CI/CD pipeline. The pipeline will:
+Run the deploy workflow manually in GitHub Actions after the infrastructure is up.
+CI still runs automatically on `main`, but AWS deployment is manual-only for now.
+The pipeline will:
 
 1. Build the API Docker image and push it to ECR.
 2. Read the ALB URL and Google client ID from SSM, bake them into the Next.js bundle, and push the web image.
@@ -174,7 +175,7 @@ printed by `terraform output`.
 
 ### Deploy a change
 
-Just push to `main`:
+Push to `main` to run CI:
 
 ```bash
 git add .
@@ -182,7 +183,18 @@ git commit -m "Your change"
 git push origin main
 ```
 
-GitHub Actions handles the rest.
+Then trigger deployment manually from GitHub Actions:
+
+1. Open the repository in GitHub
+2. Go to `Actions`
+3. Open `Deploy to AWS`
+4. Click `Run workflow`
+5. Choose the `main` branch and run it
+
+Current behavior:
+- `CI` runs automatically on pushes to `main`
+- `Deploy to AWS` does not auto-run after CI
+- AWS deployment happens only when you manually start the workflow
 
 ### Run database migrations
 
@@ -220,6 +232,110 @@ aws ecs update-service \
 ```
 
 Or update `api_desired_count` in `terraform.tfvars` and re-apply.
+
+---
+
+## AWS Lifecycle Scripts
+
+The repo includes two different AWS stop/start modes:
+
+- `npm run aws:pause` / `npm run aws:resume`
+  Use this when you want to temporarily stop the app but keep the infrastructure.
+- `npm run aws:down` / `npm run aws:up`
+  Use this when you want a full shutdown and later recreate the whole website from scratch.
+
+### Full shutdown: `aws:down`
+
+```bash
+npm run aws:down
+```
+
+The script will ask you to type:
+
+```bash
+DESTROY
+```
+
+Effect of `aws:down`:
+- Runs a full Terraform destroy for the AWS stack
+- Deletes ECS services, ALB, NAT Gateway, ECR repositories, CloudWatch log groups, and RDS
+- Empties ECR repositories and the versioned ALB log bucket first so destroy can succeed cleanly
+- Leaves the external SSM secrets in place, such as:
+  - `/diet-designer/prod/GOOGLE_CLIENT_ID`
+  - `/diet-designer/prod/JWT_SECRET`
+  - `/diet-designer/prod/SPOONACULAR_API_KEY`
+  - `/diet-designer/prod/USDA_API_KEY`
+
+Important effects of `aws:down`:
+- This is destructive
+- The current RDS database data is lost
+  Current Terraform uses `skip_final_snapshot = true` in [rds.tf](/Users/chenyuebo/Desktop/Projects/project_prac/diet-designer/infra/terraform/rds.tf)
+- The next cold start will create a new ALB and likely a new public URL
+- This is the mode to use when you want the AWS website fully shut down, not just paused
+
+### Full relaunch: `aws:up`
+
+```bash
+npm run aws:up
+```
+
+Effect of `aws:up`:
+- Re-initializes Terraform
+- Creates the shared infrastructure first:
+  - VPC
+  - subnets
+  - security groups
+  - NAT Gateway
+  - ALB
+  - RDS
+  - ECR repositories
+  - IAM roles
+  - ECS cluster
+- Reads `GOOGLE_CLIENT_ID` from SSM
+- Builds the API and web Docker images locally
+- Pushes those images to ECR
+- Finishes the full Terraform apply
+- Waits for ECS services to become stable
+- Prints the new ALB URL at the end
+
+Requirements for `aws:up`:
+- AWS CLI credentials configured
+- Terraform installed
+- Docker running locally
+- The external SSM secrets above must still exist
+
+Important effects of `aws:up`:
+- The recreated database is fresh if you previously used `aws:down`
+- The site URL can change because the ALB is recreated
+- The web image is rebuilt against the new ALB URL automatically
+
+### Recommended use
+
+Fully shut down the whole website:
+
+```bash
+npm run aws:down
+```
+
+Bring the whole website back later:
+
+```bash
+npm run aws:up
+```
+
+### If you do not want to lose the database
+
+Use the pause/resume scripts instead:
+
+```bash
+npm run aws:pause
+npm run aws:resume
+```
+
+Effect of pause/resume:
+- `aws:pause` scales ECS services to zero and stops RDS
+- `aws:resume` starts RDS and restores ECS desired counts from `terraform.tfvars`
+- This keeps the infrastructure and current data, but it does not eliminate all AWS cost because resources like ALB and NAT Gateway can still exist
 
 ---
 
