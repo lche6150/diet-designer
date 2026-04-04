@@ -43,6 +43,17 @@ export const clearAuthSession = () => {
   localStorage.removeItem(userStorageKey);
 };
 
+export const resolveRedirectPath = (
+  value?: string | null,
+  fallback = "/"
+) => {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) {
+    return fallback;
+  }
+
+  return value;
+};
+
 export const apiBaseUrl =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 

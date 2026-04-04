@@ -2,27 +2,38 @@
 
 ## Current State
 
-The project is deployed and operational on AWS.
+The codebase is in a working state, but the AWS runtime is currently shut down.
 
-- App URL: `http://diet-designer-prod-alb-1451946939.ap-southeast-2.elb.amazonaws.com`
-- ECS cluster: `diet-designer-prod-cluster`
-- API service: `diet-designer-prod-api`
-- Web service: `diet-designer-prod-web`
-- API ECR: `206749730536.dkr.ecr.ap-southeast-2.amazonaws.com/diet-designer/api`
-- Web ECR: `206749730536.dkr.ecr.ap-southeast-2.amazonaws.com/diet-designer/web`
-- RDS endpoint: `diet-designer-prod-postgres.czqsa2qw6oic.ap-southeast-2.rds.amazonaws.com`
-- ALB access log bucket: `diet-designer-prod-alb-logs-206749730536`
-- API ECS Exec: enabled for VPC-side operational access
+- AWS infrastructure is not running right now
+- The website is offline until the stack is recreated with `npm run aws:up`
+- CI still runs automatically on pushes to `main`
+- AWS deployment is now manual-only through GitHub Actions
+- Local development can still run through Docker or workspace dev commands
+
+Current deployment behavior:
+- `CI` auto-runs on `main`
+- `Deploy to AWS` only runs when started manually from GitHub Actions
+
+Current AWS lifecycle modes:
+- `npm run aws:pause` / `npm run aws:resume`
+  Use for temporary stop/start while keeping infrastructure
+- `npm run aws:down` / `npm run aws:up`
+  Use for full shutdown and full recreation of the stack
+
+Important effect of full shutdown:
+- `npm run aws:down` destroys the current RDS instance
+- Current database data is lost because Terraform uses `skip_final_snapshot = true`
 
 ## What Was Implemented
 
 ### 1. CI Pipeline
 
-A GitHub Actions CI workflow was implemented to validate infrastructure and application builds before deployment.
+A GitHub Actions CI workflow is in place to validate the repo before deployment.
 
 What it does:
 - Checks Terraform formatting
 - Runs Terraform validation
+- Generates the Prisma client
 - Builds the API
 - Lints the frontend
 - Builds the frontend
@@ -38,14 +49,14 @@ git push origin main
 
 Then review the `CI` workflow in GitHub Actions.
 
-### 2. CD / AWS Deployment Pipeline
+### 2. Manual AWS Deployment Workflow
 
-A GitHub Actions deployment workflow was implemented for AWS ECS deployment.
+An AWS deployment workflow is implemented, but it is now manual-only.
 
 What it does:
 - Builds Docker images for API and web
 - Pushes images to ECR
-- Reads runtime/build config from AWS SSM
+- Reads runtime and build configuration from AWS SSM
 - Registers new ECS task definition revisions
 - Deploys new revisions to ECS services
 
@@ -54,25 +65,25 @@ Main file:
 
 How to use:
 
-```bash
-git push origin main
-```
+1. Push code to `main` if needed
+2. Open GitHub Actions
+3. Open `Deploy to AWS`
+4. Click `Run workflow`
+5. Choose `main`
 
-Or run `Deploy to AWS` manually in GitHub Actions.
+### 3. Terraform AWS Infrastructure
 
-### 3. Terraform Infrastructure
+Terraform was set up for the full AWS stack.
 
-Terraform infrastructure was set up and applied successfully.
-
-Provisioned resources include:
+Managed resources include:
 - VPC and subnets
 - Security groups
 - ALB
 - ECS cluster and services
 - ECR repositories
 - RDS PostgreSQL
-- IAM roles/policies
-- SSM parameters
+- IAM roles and policies
+- SSM parameters and parameter references
 - S3 bucket for ALB access logs
 
 Main directory:
@@ -86,26 +97,76 @@ terraform -chdir=infra/terraform apply
 terraform -chdir=infra/terraform output
 ```
 
-### 4. Production Google Sign-In
+### 4. AWS Lifecycle Scripts
 
-Google sign-in was configured and made to work in production.
+The repo now includes scripts for stopping, resuming, destroying, and recreating the AWS environment.
+
+What was added:
+- `scripts/aws-pause.sh`
+- `scripts/aws-resume.sh`
+- `scripts/aws-down.sh`
+- `scripts/aws-up.sh`
+
+What they do:
+- `aws:pause`
+  Scales ECS services down and stops RDS, but keeps the infrastructure
+- `aws:resume`
+  Starts RDS, restores ECS desired counts, and waits for service recovery
+- `aws:down`
+  Fully destroys the stack
+- `aws:up`
+  Recreates the stack, builds and pushes images, then finishes Terraform apply
+
+How to use:
+
+```bash
+npm run aws:pause
+npm run aws:resume
+npm run aws:down
+npm run aws:up
+```
+
+### 5. Production Google Sign-In
+
+Google sign-in was wired for the deployed frontend and backend.
 
 What was addressed:
 - Frontend Google Identity Services integration
 - Backend Google token verification
 - Production environment variable wiring
 - Authorized JavaScript origin alignment in Google Cloud Console
+- Popup compatibility header for the web app
 
 Main files:
 - `apps/web/src/components/google-auth-button.tsx`
 - `apps/api/src/services/googleAuthService.ts`
+- `apps/web/next.config.ts`
 
 How to use:
-- Open the deployed app
+- Add the correct origins in Google Cloud Console
+- Deploy the app
 - Use the Google sign-in button
-- Ensure the deployed site origin is added to the Google OAuth client
 
-### 5. Prisma / RDS Production Connection
+### 6. Planner Access Control
+
+The planner is now restricted to authenticated users.
+
+What it does:
+- Guests trying to access `/planner` are redirected to sign-in
+- After sign-in, the user is returned to the planner
+- Header navigation also respects the auth requirement
+
+Main files:
+- `apps/web/src/components/auth-required.tsx`
+- `apps/web/src/app/planner/page.tsx`
+- `apps/web/src/app/signin/page.tsx`
+- `apps/web/src/app/signin/page-content.tsx`
+- `apps/web/src/app/signup/page.tsx`
+- `apps/web/src/app/signup/page-content.tsx`
+- `apps/web/src/lib/auth.ts`
+- `apps/web/src/components/site-header.tsx`
+
+### 7. Prisma / RDS Production Connection
 
 The production database connection path was corrected so Prisma can connect reliably to RDS.
 
@@ -117,21 +178,7 @@ What was addressed:
 Main file:
 - `infra/terraform/rds.tf`
 
-How to use:
-- Re-apply Terraform after DB connection changes
-- Force API redeploy if ECS needs to reload the updated secret
-
-Example:
-
-```bash
-aws ecs update-service \
-  --cluster diet-designer-prod-cluster \
-  --service diet-designer-prod-api \
-  --force-new-deployment \
-  --region ap-southeast-2
-```
-
-### 6. AWS-Native Request Logging
+### 8. AWS-Native Request Logging
 
 Application Load Balancer access logging was enabled and routed to S3.
 
@@ -147,34 +194,19 @@ Main files:
 - `infra/terraform/alb.tf`
 - `infra/terraform/outputs.tf`
 
-How to use:
+How to use when the stack is running:
 
 ```bash
 terraform -chdir=infra/terraform output -raw alb_access_logs_bucket_name
 ```
 
-List log objects:
+### 9. ECS Exec for Private DB Access
 
-```bash
-aws s3 ls "s3://diet-designer-prod-alb-logs-206749730536/alb/AWSLogs/206749730536/elasticloadbalancing/ap-southeast-2/" \
-  --recursive \
-  --region ap-southeast-2
-```
-
-Inspect one log file:
-
-```bash
-aws s3 cp "s3://FULL_LOG_PATH.log.gz" - --region ap-southeast-2 | gunzip -c
-```
-
-### 7. ECS Exec for Private DB Access
-
-ECS Exec was enabled on the API service so the project can be inspected from
-inside the VPC without exposing the RDS instance publicly.
+ECS Exec was enabled on the API service so the private database can be inspected from inside the VPC.
 
 What it provides:
 - Shell access inside the running API container
-- Database inspection from the same network path the API uses
+- Database inspection through the same network path the API uses
 - A reusable script for listing users or opening an interactive shell
 
 Main files:
@@ -182,52 +214,76 @@ Main files:
 - `infra/terraform/iam.tf`
 - `scripts/ecs-api-db.sh`
 
-How to use:
-
-Open a shell in the API task:
+How to use when the stack is running:
 
 ```bash
 ./scripts/ecs-api-db.sh shell
-```
-
-List registered users:
-
-```bash
 ./scripts/ecs-api-db.sh users
-```
-
-Print the user count:
-
-```bash
 ./scripts/ecs-api-db.sh count
 ```
 
-Run a one-off remote command:
+### 10. Ingredient Search Improvements
 
-```bash
-./scripts/ecs-api-db.sh exec 'env | sort'
-```
+The ingredient search experience was cleaned up substantially.
+
+What changed:
+- Duplicate ingredient names from different brands are collapsed
+- Generic USDA foods are preferred over branded packaged foods
+- Brand names are no longer shown in the search result UI
+- Upstream USDA request handling was fixed to avoid surfacing raw HTML errors
+- Search results can be hidden and shown with a single animated toggle
+- Selected ingredients are shown in a sticky side panel instead of below the result list
+
+Main files:
+- `apps/api/src/services/usdaService.ts`
+- `apps/web/src/components/ingredient-search.tsx`
+
+### 11. Planner UX Improvements
+
+Planner interactions were improved so the page feels more directed and usable.
+
+What changed:
+- Step 1 `Continue` scrolls smoothly to step 2
+- Step 2 is highlighted briefly after the scroll
+- Search results expand and collapse with animation
+
+Main file:
+- `apps/web/src/app/planner/page.tsx`
+
+### 12. Route and Navigation Fixes
+
+Several frontend fixes were added to remove broken navigation and build issues.
+
+What changed:
+- Added a real `/recipes` page so header prefetching no longer hits a missing route
+- Split sign-in and sign-up pages into Suspense-safe wrappers to satisfy Next.js build requirements
+
+Main files:
+- `apps/web/src/app/recipes/page.tsx`
+- `apps/web/src/app/signin/page.tsx`
+- `apps/web/src/app/signin/page-content.tsx`
+- `apps/web/src/app/signup/page.tsx`
+- `apps/web/src/app/signup/page-content.tsx`
 
 ## What The Project Can Do Now
 
-The current deployed project can:
+At the code level, the project currently supports:
 
-- Serve a live Next.js frontend on AWS ECS/Fargate
-- Serve an Express API on AWS ECS/Fargate
-- Use PostgreSQL on AWS RDS via Prisma
-- Authenticate users with Google sign-in
-- Persist authenticated user data
-- Generate nutrition targets
-- Search ingredients
-- Generate meal plans
-- Build and deploy automatically from GitHub Actions
-- Store runtime configuration and secrets in SSM
-- Record request history through ALB access logs in S3
-- Inspect private RDS-backed user data safely from inside the VPC via ECS Exec
+- Next.js frontend and Express API in a monorepo
+- Google sign-in
+- Auth-gated planner access
+- Nutrition target generation
+- Ingredient search with cleaner generic-first results
+- Meal-planning workflow
+- Prisma with PostgreSQL
+- Manual AWS deployment through GitHub Actions
+- Full AWS shutdown and full AWS recreation through scripts
+- Request logging through ALB access logs when AWS is running
+- Private DB inspection through ECS Exec when AWS is running
 
 ## How To Operate The Project
 
-### Deploy a Code Change
+### Run CI
 
 ```bash
 git add .
@@ -235,88 +291,72 @@ git commit -m "Your change"
 git push origin main
 ```
 
-### Check Deployment Status
+### Manually Deploy To AWS
+
+1. Make sure the stack exists
+2. Push code if needed
+3. Open GitHub Actions
+4. Open `Deploy to AWS`
+5. Click `Run workflow`
+
+If the stack was fully destroyed first:
 
 ```bash
-aws ecs describe-services \
-  --cluster diet-designer-prod-cluster \
-  --services diet-designer-prod-api diet-designer-prod-web \
-  --region ap-southeast-2
+npm run aws:up
 ```
 
-Also review GitHub Actions for:
-- `CI`
-- `Deploy to AWS`
-
-### Check Application Logs
+### Fully Shut Down AWS
 
 ```bash
-aws logs tail /ecs/diet-designer-prod/api --follow --region ap-southeast-2
-aws logs tail /ecs/diet-designer-prod/web --follow --region ap-southeast-2
+npm run aws:down
 ```
 
-### Check Visit / Request History
-
-Visit history is currently available as raw ALB request logs in S3.
-
-Notes:
-- This is request-level logging, not session analytics
-- One page load may create multiple log entries
-- Logs are written with a delay, not instantly
-
-### Inspect Registered Users / DB Access
-
-The RDS instance is private and cannot be queried directly from a typical local
-machine. Use ECS Exec through the API service instead.
-
-Open a shell:
+### Temporarily Pause AWS
 
 ```bash
-./scripts/ecs-api-db.sh shell
+npm run aws:pause
 ```
 
-List users:
+### Resume A Paused Stack
 
 ```bash
-./scripts/ecs-api-db.sh users
+npm run aws:resume
 ```
 
-Count users:
+### Run The App Locally
+
+With Docker:
 
 ```bash
-./scripts/ecs-api-db.sh count
+docker compose up --build
 ```
 
-Requirements:
-- AWS CLI configured
-- `session-manager-plugin` installed locally
-- ECS Exec enabled on the API service
+Without Docker:
+
+```bash
+npm run dev --workspace api
+npm run dev --workspace web
+```
 
 ## Current Status Summary
 
-- Infrastructure deployed successfully
-- Website live and accessible
-- Google sign-in working
-- Database connection working
-- Private DB inspection available through ECS Exec
-- CI/CD working
-- ALB access logs writing to S3
-- Repository state aligned with deployed infrastructure
-
-## Recent Relevant Commits
-
-- `06a9331` Add ALB access logging
-- `ddd96b1` Fix Linux CI dependency install
-- `87f8f63` Set up AWS deploy and CI/CD
-- `9a54623` ci: run prisma generate before api build
+- AWS runtime is currently shut down
+- No active deployed website is expected until `npm run aws:up`
+- CI is active on pushes to `main`
+- Deploy is manual-only
+- Google sign-in flow is implemented
+- Planner is login-protected
+- Ingredient search and planner UX have been improved
+- AWS lifecycle scripts are available for pause, resume, destroy, and recreate
+- ECS Exec DB access is available when the stack is running
 
 ## Remaining Improvements
 
 Recommended next improvements:
 
-- Add HTTPS and a real domain to the ALB
-- Add Athena queries for easier access-log analysis
+- Add HTTPS and a real domain to the ALB when AWS is running again
+- Add Athena queries for easier ALB log analysis
 - Tighten IAM policies toward least privilege
 - Add automated tests for API and frontend
-- Improve frontend metadata/title/description
-- Add backup/operational documentation for production
+- Add backup and recovery documentation before using full destroy in a real environment
+- Add a safer non-destructive low-cost environment mode if frequent stop/start is needed

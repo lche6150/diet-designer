@@ -9,6 +9,10 @@
     "apps/api"
   ],
   "scripts": {
+    "aws:down": "./scripts/aws-down.sh",
+    "aws:pause": "./scripts/aws-pause.sh",
+    "aws:resume": "./scripts/aws-resume.sh",
+    "aws:up": "./scripts/aws-up.sh",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

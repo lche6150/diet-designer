@@ -7,6 +7,7 @@ import { useAuth } from "./auth-provider";
 export default function SiteHeader() {
   const { status, user, signOut } = useAuth();
   const router = useRouter();
+  const plannerHref = status === "guest" ? "/signin?next=%2Fplanner" : "/planner";
 
   const handleSignOut = () => {
     signOut();
@@ -23,7 +24,7 @@ export default function SiteHeader() {
           <Link className="hover:text-zinc-900" href="#features">
             Features
           </Link>
-          <Link className="hover:text-zinc-900" href="/planner">
+          <Link className="hover:text-zinc-900" href={plannerHref}>
             Planner
           </Link>
           <Link className="hover:text-zinc-900" href="/recipes">
